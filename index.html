@@ -1,0 +1,871 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="授業中に急に出される6桁の出席コードを、クラスの誰よりも早く送信できるかを競うスマホ向けゲーム。">
+<style>
+:root { color-scheme: light; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); box-sizing: border-box; }
+body { margin: 0; font-size: 14px; }
+img { max-width: 100%; }
+</style>
+<title>出席コード早打ち</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=M+PLUS+1+Code:wght@500;700&family=Zen+Kaku+Gothic+New:wght@500;700&display=swap">
+<style>
+/* Layout: 上 = 講義室のスクリーン（先生と出席コード）, 下 = 机の下の自分のスマホ */
+:root {
+  --bg: #e6e8ec;
+  --fg: #1d2430;
+  --muted: #5d6676;
+  --board: #24352c;
+  --board-fg: #eef3e6;
+  --chalk: #f4d35e;
+  --frame: #6b4f32;
+  --phone: #15181d;
+  --app-bg: #f6f7f4;
+  --app-fg: #1d2430;
+  --app-sub: #69717e;
+  --app-line: #d9ddd5;
+  --app-card: #ffffff;
+  --app-main: #2c6e49;
+  --app-main-fg: #ffffff;
+  --ok: #2f9e5b;
+  --ng: #d6453d;
+  --font-display: "Dela Gothic One", "Hiragino Sans", "Yu Gothic", sans-serif;
+  --font-body: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", sans-serif;
+  --font-num: "M PLUS 1 Code", ui-monospace, "SFMono-Regular", monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #101318; --fg: #e7eaf0; --muted: #9aa3b2;
+  --board: #1c2b23; --frame: #4d3923; --phone: #050607;
+  --app-bg: #1b1f25; --app-fg: #e7eaf0; --app-sub: #9aa3b2; --app-line: #2d333c; --app-card: #242a32; --app-main: #3f9a67;
+  --ok: #4cc27c; --ng: #ff6b61; color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: #101318; --fg: #e7eaf0; --muted: #9aa3b2;
+  --board: #1c2b23; --frame: #4d3923; --phone: #050607;
+  --app-bg: #1b1f25; --app-fg: #e7eaf0; --app-sub: #9aa3b2; --app-line: #2d333c; --app-card: #242a32; --app-main: #3f9a67;
+  --ok: #4cc27c; --ng: #ff6b61; color-scheme: dark;
+}
+
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: var(--font-body); overflow: hidden;
+  -webkit-user-select: none; user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+button { font-family: inherit; touch-action: manipulation; cursor: pointer; }
+button:focus-visible { outline: 3px solid var(--chalk); outline-offset: 2px; }
+
+.app {
+  height: 100%; max-width: 460px; margin: 0 auto;
+  display: flex; flex-direction: column; gap: 10px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 10px; box-sizing: border-box;
+}
+
+/* ---------- スクリーン ---------- */
+.screen {
+  position: relative; flex: 0 0 32%; min-height: 165px;
+  background: var(--board); color: var(--board-fg);
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 6px var(--frame), inset 0 0 40px rgba(0,0,0,.45);
+  padding: 16px 18px; box-sizing: border-box; overflow: hidden;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.slide-top { display: flex; justify-content: space-between; font-size: 11px; letter-spacing: .08em; opacity: .7; }
+.slide-title { font-family: var(--font-display); font-size: clamp(16px, 5vw, 21px); line-height: 1.3; }
+.slide-body { font-size: 13px; line-height: 1.7; opacity: .85; margin: 0; padding-left: 1.1em; }
+.reveal { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; gap: 4px; }
+.reveal .lbl { font-family: var(--font-display); font-size: 16px; }
+.reveal .code {
+  font-family: var(--font-num); font-weight: 700; color: var(--chalk);
+  font-size: clamp(40px, 13vw, 62px); letter-spacing: .08em; line-height: 1; white-space: nowrap;
+  font-variant-numeric: tabular-nums; animation: pop .2s ease-out;
+}
+.reveal .code.gone { color: var(--board-fg); opacity: .35; animation: none; }
+.reveal .sub { font-size: 12px; opacity: .75; }
+@keyframes pop { from { transform: scale(1.25); opacity: 0; } to { transform: none; opacity: 1; } }
+.counter { position: absolute; right: 14px; bottom: 10px; font-size: 11px; opacity: .85; font-variant-numeric: tabular-nums; }
+.counter.closed { color: var(--chalk); opacity: 1; font-weight: 700; }
+
+/* 先生 */
+.teacher { position: absolute; left: 12px; bottom: 8px; display: flex; align-items: flex-end; gap: 6px; pointer-events: none; }
+.t-face {
+  width: 40px; height: 40px; border-radius: 50%; box-sizing: border-box; flex: none;
+  background: var(--skin, #e8c9a6);
+  border: 3px solid #2a1d12; border-top: 10px solid var(--hair, #3a2a1c);
+  position: relative; transition: transform .25s;
+}
+.t-face::before, .t-face::after {
+  content: ""; position: absolute; top: 9px; width: 5px; height: 5px; border-radius: 50%; background: #2a1d12;
+  transition: left .25s;
+}
+.t-face::before { left: 8px; } .t-face::after { left: 21px; }
+.t-face.glasses::before, .t-face.glasses::after { box-shadow: 0 0 0 3px rgba(20,20,20,.75); }
+.teacher.look .t-face { transform: scale(1.12); }
+.teacher.look .t-face::before { left: 11px; } .teacher.look .t-face::after { left: 24px; }
+.teacher.warn .t-face { transform: rotate(-12deg); }
+.bubble {
+  background: var(--board-fg); color: #1d2430; font-size: 12px; font-weight: 700;
+  padding: 5px 9px; border-radius: 10px 10px 10px 2px; margin-bottom: 26px; white-space: nowrap;
+}
+.bubble:empty { display: none; }
+.teacher.look .bubble { background: var(--ng); color: #fff; }
+
+/* ---------- スマホ ---------- */
+.phone {
+  flex: 1 1 auto; min-height: 0;
+  background: var(--phone); border-radius: 28px; padding: 8px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.25);
+  display: flex; flex-direction: column; position: relative;
+}
+.display {
+  flex: 1; min-height: 0; border-radius: 21px; overflow: hidden;
+  background: var(--app-bg); color: var(--app-fg);
+  display: flex; flex-direction: column; position: relative;
+}
+.display.on-home { background: transparent; color: #fff; }
+.wall { position: absolute; inset: 0; z-index: 0; }
+.status {
+  position: relative; z-index: 1;
+  display: flex; justify-content: space-between; padding: 6px 16px 4px;
+  font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.view { position: relative; z-index: 1; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.homebar { position: relative; z-index: 1; height: 22px; display: grid; place-items: center; }
+.homebar button { width: 140px; height: 18px; border: none; background: transparent; padding: 0; display: grid; place-items: center; }
+.homebar button::before { content: ""; width: 110px; height: 5px; border-radius: 3px; background: currentColor; opacity: .55; }
+
+/* ホーム画面 */
+.home { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 4px 12px 6px; }
+.home .clock { text-align: center; font-family: var(--font-num); font-size: 34px; font-weight: 500; line-height: 1.1; }
+.home .date { text-align: center; font-size: 11px; opacity: .85; margin-bottom: 10px; }
+.grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px 6px; }
+.dock {
+  margin-top: auto; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
+  background: rgba(255,255,255,.18); border-radius: 22px; padding: 8px 6px;
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+}
+.icon { display: flex; flex-direction: column; align-items: center; gap: 3px; background: none; border: none; color: #fff; padding: 0; min-width: 0; }
+.icon i {
+  position: relative; width: clamp(40px, 11.5vw, 50px); aspect-ratio: 1; border-radius: 26%;
+  display: grid; place-items: center; font-style: normal; font-weight: 700; font-size: clamp(17px, 5vw, 22px); line-height: 1;
+  box-shadow: 0 1px 3px rgba(0,0,0,.25);
+}
+.icon i small { position: absolute; top: 5px; font-size: 8px; font-weight: 700; color: #d6453d; letter-spacing: .05em; }
+.icon i .cal { margin-top: 9px; color: #1d2430; font-weight: 500; font-size: clamp(18px, 5.4vw, 24px); }
+.icon i em {
+  position: absolute; top: -5px; right: -6px; min-width: 18px; height: 18px; padding: 0 4px; box-sizing: border-box;
+  border-radius: 9px; background: #ff3b30; color: #fff; font-style: normal; font-size: 11px; font-weight: 700;
+  display: grid; place-items: center; font-family: var(--font-body);
+}
+.icon span { font-size: 10px; text-shadow: 0 1px 2px rgba(0,0,0,.5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.icon:active i { filter: brightness(.75); }
+
+/* アプリ共通 */
+.bar { padding: 10px 16px; border-bottom: 1px solid var(--app-line); display: flex; align-items: center; gap: 10px; min-height: 22px; }
+.bar b { font-size: 15px; }
+.bar .back { border: none; background: none; color: var(--app-main); font-size: 14px; font-weight: 700; padding: 4px 0; }
+.bar .spacer { flex: 1; }
+.bar .reload { border: 1px solid var(--app-line); background: var(--app-bg); color: var(--app-fg); border-radius: 16px; font-size: 12px; padding: 6px 12px; font-weight: 700; }
+.pane { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; }
+.scroll { overflow-y: auto; }
+.muted { color: var(--app-sub); }
+
+/* 出席アプリ */
+.course-card { border: 1px solid var(--app-line); background: var(--app-card); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 4px; }
+.course-card small { color: var(--app-sub); font-size: 11px; }
+.course-card strong { font-size: 16px; }
+.state { font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 10px; align-self: flex-start; }
+.state.wait, .state.loading { background: var(--app-line); color: var(--app-sub); }
+.state.open { background: var(--ok); color: #fff; }
+.state.closed { background: var(--ng); color: #fff; }
+.main-btn { border: none; border-radius: 12px; padding: 16px; font-size: 16px; font-weight: 700; background: var(--app-main); color: var(--app-main-fg); }
+.main-btn:disabled { background: var(--app-line); color: var(--app-sub); cursor: default; }
+.main-btn:not(:disabled):active { filter: brightness(.85); }
+.hint { font-size: 12px; color: var(--app-sub); text-align: center; margin: 0; }
+.slots { display: flex; justify-content: center; gap: 6px; }
+.slot {
+  width: 38px; height: 50px; border-radius: 8px; border: 2px solid var(--app-line); box-sizing: border-box;
+  display: grid; place-items: center; font-family: var(--font-num); font-size: 24px; font-weight: 700;
+}
+.slot:nth-child(3) { margin-right: 6px; }
+.slot.cur { border-color: var(--app-main); }
+.slots.ng { animation: shake .25s; }
+.slots.ng .slot { border-color: var(--ng); }
+@keyframes shake { 25% { transform: translateX(-8px); } 75% { transform: translateX(8px); } }
+.err { color: var(--ng); font-size: 12px; text-align: center; min-height: 1.2em; margin: 0; font-weight: 700; }
+.keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: auto; }
+.keys button { font-family: var(--font-num); font-size: 22px; font-weight: 700; height: clamp(40px, 6.6vh, 54px); border: none; border-radius: 10px; background: var(--app-line); color: var(--app-fg); }
+.keys button:active { filter: brightness(.85); }
+.keys .fn { font-family: var(--font-body); font-size: 13px; }
+.keys .send { background: var(--app-main); color: var(--app-main-fg); font-family: var(--font-body); font-size: 15px; }
+.done { align-items: center; justify-content: center; text-align: center; }
+.done .check { width: 64px; height: 64px; border-radius: 50%; background: var(--ok); color: #fff; display: grid; place-items: center; font-size: 34px; }
+.done .num { font-family: var(--font-num); font-size: 15px; color: var(--app-sub); }
+
+/* ダミーアプリ */
+.list { flex: 1; min-height: 0; overflow-y: auto; }
+.row {
+  display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left;
+  border: none; border-bottom: 1px solid var(--app-line); background: none; color: var(--app-fg);
+  padding: 10px 16px; font-size: 13px;
+}
+.row:active { background: var(--app-line); }
+.r-top { display: flex; justify-content: space-between; gap: 8px; }
+.r-top small { color: var(--app-sub); font-size: 11px; flex: none; }
+.r-subj { font-weight: 700; font-size: 12px; }
+.r-prev { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.unread b::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #2f6fe0; margin-right: 6px; vertical-align: 1px; }
+.m-subj { font-size: 15px; line-height: 1.5; }
+.m-body { font-size: 13px; line-height: 1.8; margin: 0; white-space: pre-line; }
+.chat { display: flex; flex-direction: column; gap: 8px; padding: 12px; overflow-y: auto; flex: 1; min-height: 0; }
+.msg { max-width: 78%; display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
+.msg small { color: var(--app-sub); font-size: 10px; }
+.msg span { background: var(--app-card); border: 1px solid var(--app-line); padding: 7px 10px; border-radius: 4px 14px 14px 14px; line-height: 1.5; }
+.msg.me { align-self: flex-end; align-items: flex-end; }
+.msg.me span { background: #9fe3b4; color: #10301c; border-color: transparent; border-radius: 14px 4px 14px 14px; }
+.center { align-items: center; justify-content: center; text-align: center; }
+.big-glyph { width: 72px; height: 72px; border-radius: 26%; display: grid; place-items: center; font-style: normal; font-size: 32px; font-weight: 700; }
+.wx-now { font-family: var(--font-num); font-size: 54px; font-weight: 500; line-height: 1; }
+.wx-rows { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; text-align: center; font-size: 11px; }
+.wx-rows b { display: block; font-size: 18px; margin: 4px 0; }
+.cal-item { display: grid; grid-template-columns: 52px 1fr; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--app-line); font-size: 13px; }
+.cal-item small { color: var(--app-sub); font-family: var(--font-num); }
+.notice { border-left: 3px solid var(--app-main); padding: 4px 10px; font-size: 12px; line-height: 1.6; }
+
+/* スマホ上のメッセージ（注意・締切） */
+.phone-msg {
+  position: absolute; inset: 0; background: rgba(0,0,0,.82); color: #fff;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  text-align: center; z-index: 3; font-size: 13px; padding: 16px;
+}
+.phone-msg b { font-family: var(--font-display); font-size: 20px; color: var(--ng); font-weight: 400; }
+
+/* ---------- オーバーレイ ---------- */
+.overlay {
+  position: fixed; inset: 0; z-index: 5;
+  background: color-mix(in srgb, var(--bg) 97%, transparent);
+  display: flex; align-items: center; justify-content: center;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 24px; overflow-y: auto;
+}
+.card { max-width: 380px; width: 100%; display: flex; flex-direction: column; gap: 14px; text-align: center; margin: auto; }
+.card h1 { font-family: var(--font-display); font-weight: 400; font-size: clamp(32px, 10.5vw, 44px); line-height: 1.15; margin: 0; text-wrap: balance; }
+.card h1 em { font-style: normal; color: var(--board); background: var(--chalk); padding: 0 .15em; }
+.card h2 { font-family: var(--font-display); font-weight: 400; font-size: clamp(24px, 7.5vw, 30px); margin: 0; line-height: 1.25; text-wrap: balance; }
+.card p { margin: 0; line-height: 1.7; color: var(--muted); font-size: 14px; }
+.rules { text-align: left; background: var(--app-bg); border-radius: 10px; padding: 14px 16px; font-size: 13px; line-height: 1.8; }
+.rules ol { margin: 0 0 6px; padding-left: 1.3em; }
+.rules b { color: var(--fg); }
+.big { font-family: var(--font-display); font-size: 20px; padding: 16px; border: none; border-radius: 14px; background: var(--board); color: var(--chalk); box-shadow: 0 4px 0 #0e1611; }
+.big:active { transform: translateY(4px); box-shadow: none; }
+.big:disabled { opacity: .5; }
+.koma { font-family: var(--font-num); font-weight: 700; letter-spacing: .1em; color: var(--muted); font-size: 13px; }
+.t-card { display: flex; gap: 14px; align-items: center; text-align: left; background: var(--app-bg); border-radius: 12px; padding: 16px; }
+.t-card .t-face { transform: scale(1.5); margin: 10px 12px; }
+.t-card b { font-size: 16px; }
+.t-card .tag { display: inline-block; margin-left: 8px; background: var(--chalk); color: #24352c; font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 12px; vertical-align: 2px; }
+.t-card p { font-size: 13px; margin-top: 4px; color: var(--fg); }
+.rank { font-family: var(--font-display); line-height: 1; color: var(--fg); }
+.rank b { font-size: 88px; font-weight: 400; }
+.rank span { font-size: 22px; }
+.rank small { display: block; font-family: var(--font-body); font-size: 13px; color: var(--muted); margin-top: 6px; }
+.title-badge { align-self: center; background: var(--chalk); color: #24352c; font-weight: 700; padding: 6px 14px; border-radius: 20px; font-size: 15px; }
+.title-badge.bad { background: var(--ng); color: #fff; }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.stats div { background: var(--app-bg); border-radius: 10px; padding: 10px 4px; }
+.stats b { display: block; font-family: var(--font-num); font-size: 20px; font-variant-numeric: tabular-nums; }
+.stats span { font-size: 11px; color: var(--muted); letter-spacing: .06em; }
+.feed { text-align: left; background: var(--app-bg); border-radius: 10px; padding: 10px 14px; font-size: 12px; line-height: 1.9; font-variant-numeric: tabular-nums; }
+.feed .me { color: var(--ok); font-weight: 700; }
+.feed .absent { color: var(--ng); font-weight: 700; }
+.progress { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.pg { display: flex; flex-direction: column; gap: 2px; padding: 8px 4px; border-radius: 10px; border: 2px dashed var(--app-line); font-size: 11px; color: var(--muted); }
+.pg b { font-family: var(--font-num); font-size: 16px; color: var(--fg); font-variant-numeric: tabular-nums; }
+.pg.done { border-style: solid; background: var(--app-bg); }
+.pg.first { border: 2px solid var(--chalk); background: var(--app-bg); }
+.pg.absent { border: 2px solid var(--ng); background: var(--app-bg); }
+.best { font-size: 13px; color: var(--muted); }
+.best.new { color: var(--ok); font-weight: 700; }
+
+@media (prefers-reduced-motion: reduce) { .reveal .code, .slots.ng { animation: none; } }
+</style>
+
+</head>
+<body>
+<div class="app">
+  <div class="screen" id="screen">
+    <div class="slide-top"><span id="courseName">情報デザイン論</span><span id="slideNo">7 / 24</span></div>
+    <div id="slide">
+      <div class="slide-title">色の三属性</div>
+      <ul class="slide-body"><li>色相・明度・彩度</li><li>マンセル表色系</li></ul>
+    </div>
+    <div class="teacher" id="teacher"><div class="t-face" id="tFace"></div><div class="bubble" id="bubble"></div></div>
+    <div class="counter" id="counter"></div>
+  </div>
+
+  <div class="phone">
+    <div class="display" id="display">
+      <div class="wall" id="wall"></div>
+      <div class="status"><span id="sbTime">10:47</span><span>5G ▮▮▮ 82%</span></div>
+      <div class="view" id="view"></div>
+      <div class="homebar"><button id="homeBtn" aria-label="ホームに戻る"></button></div>
+      <div class="phone-msg" id="phoneMsg" hidden><b id="pmTitle"></b><span id="pmSub"></span></div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="title">
+  <div class="card">
+    <h1>出席コード<br><em>一番乗り</em></h1>
+    <p>授業中、先生が急に出席コードを出す。<br>クラスの誰よりも早く送信しよう。<br>1日は<b>1限〜3限の3コマ</b>。平均順位で勝負。</p>
+    <div class="rules">
+      <ol>
+        <li>ホーム画面から<b>出席アプリ</b>を探して開く（配置は毎回変わる）</li>
+        <li><b>出席を提出</b> → <b>6桁</b>のコードを打って <b>送信</b></li>
+        <li>受付前に開いていたアプリは<b>更新</b>しないと反映されない</li>
+      </ol>
+      先生によってクセがある。<b>コードをすぐ消す</b>先生、<b>すぐ締め切る</b>先生も。<br>
+      先生が<b>こっちを見たとき</b>にアプリ（メールなども）を開いていると注意されて、しばらく操作できない。（まったく注意しない先生もいる）
+    </div>
+    <button class="big" id="start">授業を受ける</button>
+    <div class="best" id="bestTitle"></div>
+  </div>
+</div>
+
+<div class="overlay" id="intro" hidden>
+  <div class="card">
+    <div class="koma" id="iKoma">1限 ・ 9:12〜</div>
+    <h2 id="iCourse">統計学入門 第11回</h2>
+    <div class="t-card">
+      <div class="t-face" id="iFace"></div>
+      <div><b id="iName">山口先生</b><span class="tag" id="iTag">のんびり</span><p id="iDesc"></p></div>
+    </div>
+    <button class="big" id="go">教室に入る</button>
+  </div>
+</div>
+
+<div class="overlay" id="result" hidden>
+  <div class="card">
+    <p id="rCourse">情報デザイン論 第7回</p>
+    <div class="rank"><b id="rRank">3</b><span id="rUnit">番目</span><small id="rOf">受講者 120人中</small></div>
+    <div class="title-badge" id="rTitle">最前列</div>
+    <div class="stats">
+      <div><b id="rTime">0.00</b><span>反応タイム(秒)</span></div>
+      <div><b id="rMiss">0</b><span>打ち間違い</span></div>
+      <div><b id="rCaught">0</b><span>注意された</span></div>
+    </div>
+    <div class="feed" id="feed"></div>
+    <div class="progress" id="progress"></div>
+    <button class="big" id="retry">次の授業へ</button>
+  </div>
+</div>
+
+<div class="overlay" id="final" hidden>
+  <div class="card">
+    <p>今日の授業はおしまい</p>
+    <div class="rank"><b id="fAvg">3.5</b><span>位</span><small>3コマの平均順位（欠席は120位あつかい）</small></div>
+    <div class="title-badge" id="fTitle">早起き組</div>
+    <div class="stats">
+      <div><b id="fFirsts">0</b><span>1位の回数</span></div>
+      <div><b id="fBestRank">1</b><span>最高順位</span></div>
+      <div><b id="fAbsent">0</b><span>欠席</span></div>
+    </div>
+    <div class="feed" id="fList"></div>
+    <div class="best" id="fBest"></div>
+    <button class="big" id="again">次の日も授業に出る</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const CLASS_SIZE = 120, ROUNDS = 3;
+  const KOMA = [{ koma: 1, time: "9:12" }, { koma: 2, time: "10:58" }, { koma: 3, time: "13:21" }];
+
+  const COURSE_POOL = [
+    { name: "統計学入門", n: 11, room: "講義棟 201", slides: [
+      ["標本と母集団", ["無作為抽出", "標本誤差"]], ["正規分布", ["平均と標準偏差", "68-95-99.7 則"]], ["仮説検定", ["帰無仮説 H₀", "p値と有意水準 5%"]] ] },
+    { name: "情報デザイン論", n: 7, room: "講義棟 301", slides: [
+      ["色の三属性", ["色相・明度・彩度", "マンセル表色系"]], ["補色と対比", ["色相環で向かい合う色", "同時対比・継時対比"]],
+      ["配色の基本", ["トーンオントーン", "ドミナントカラー"]], ["ユニバーサルデザインと色", ["色覚の多様性", "色だけに頼らない表現"]] ] },
+    { name: "メディア文化史", n: 3, room: "大講義室", slides: [
+      ["写真の誕生", ["ダゲレオタイプ（1839）", "肖像写真の流行"]], ["映画以前", ["幻灯・パノラマ", "ゾートロープ"]], ["複製技術の時代", ["ベンヤミンとアウラ", "大量複製と鑑賞"]] ] },
+    { name: "インタラクション演習", n: 5, room: "実習室 A", slides: [
+      ["フィッツの法則", ["距離が遠いほど遅い", "ボタンは大きく"]], ["フィードバック", ["押した感触を返す", "0.1秒以内が目安"]], ["プロトタイピング", ["ペーパープロトタイプ", "早く作って早く試す"]] ] },
+    { name: "地域社会論", n: 9, room: "講義棟 105", slides: [
+      ["人口減少と地方都市", ["コンパクトシティ", "公共交通の維持"]], ["まちづくりの担い手", ["NPO・住民協議会", "大学との連携"]], ["フィールドワーク", ["聞き取り調査", "記録と倫理"]] ] },
+  ];
+
+  // 先生ごとのクセ。show: コードを出している秒数 / close: 受付の締切秒数 / reveal: コードを出すまでの秒数 / look: 学生を見る間隔
+  const TEACHERS = [
+    { name: "山口先生", tag: "のんびり", desc: "コードはずっと出しっぱなし。受付も長め。", show: Infinity, close: 40, reveal: [4, 10], look: [3, 6], fake: [3, 6], skin: "#e8c9a6", hair: "#3a2a1c" },
+    { name: "佐々木先生", tag: "すぐ消す", desc: "コードは3秒で消える。見たら覚えて打とう。", show: 3, close: 25, reveal: [4, 10], look: [3, 6], fake: [3, 6], skin: "#f0d2b4", hair: "#9a9a9a", glasses: true, slow: 0.7 },
+    { name: "大川先生", tag: "すぐ締め切る", desc: "受付は10秒で締め切り。間に合わないと欠席。", show: Infinity, close: 10, reveal: [4, 10], look: [3, 6], fake: [3, 6], skin: "#d9b28f", hair: "#151515" },
+    { name: "森先生", tag: "よく見てる", desc: "しょっちゅう学生の方を見る。先にアプリを開いて待つのは危険。", show: Infinity, close: 30, reveal: [5, 11], look: [1, 2.2], fake: [3, 6], skin: "#ecc7a0", hair: "#6b4528", glasses: true },
+    { name: "西田先生", tag: "スマホ注意しない", desc: "スマホをいじっていても何も言わない。そのかわりクラス全員アプリを開いて待っているので、みんな速い。", show: Infinity, close: 30, reveal: [5, 12], look: null, fake: [3, 6], skin: "#f2d3b3", hair: "#c9a36a", slow: -0.6 },
+    { name: "岡田先生", tag: "焦らす", desc: "なかなかコードを出さない。フェイント多め。コードは6秒で消える。", show: 6, close: 30, reveal: [10, 17], look: [3, 6], fake: [1.4, 2.6], skin: "#e3bf9a", hair: "#4a3020", slow: 0.3 },
+  ];
+  const FAKEOUTS = ["えー、では…", "ここ大事です", "来週レポート出します", "…はい、次いきます", "出席…は後で取ります", "じゃあ出席…の前に", "ここテストに出ます"];
+  const NAMES = ["佐藤", "鈴木", "高橋", "田中", "伊藤", "渡辺", "山本", "中村", "小林", "加藤", "吉田", "山田", "松本", "井上", "木村", "清水"];
+  const WALLS = [
+    "linear-gradient(160deg,#43577a,#1f2a3f 60%,#2c3d36)",
+    "linear-gradient(170deg,#f0a07a,#b0546a 55%,#3a2346)",
+    "linear-gradient(200deg,#6fb3a8,#2e6f7a 50%,#18324a)",
+    "radial-gradient(circle at 30% 20%,#7d6bd6,#2b2266 70%)",
+    "linear-gradient(160deg,#9bb06a,#4f6b3a 60%,#22301c)",
+    "linear-gradient(180deg,#2b2b2b,#555 50%,#1a1a1a)",
+  ];
+  const now = new Date();
+  const DOW = "日月火水木金土"[now.getDay()];
+  const DATE = `${now.getMonth() + 1}月${now.getDate()}日（${DOW}）`;
+
+  // ホーム画面のアプリ（ブランドではない架空のアプリ）
+  const APPS = {
+    attend:  { name: "出席",     bg: "linear-gradient(150deg,#3a8a5c,#2c6e49)", glyph: "出" },
+    portal:  { name: "学生ポータル", bg: "linear-gradient(150deg,#3f8f62,#2a6845)", glyph: "学", blurb: "" },
+    syllabus:{ name: "シラバス", bg: "linear-gradient(150deg,#47966a,#2f7550)", glyph: "シ", blurb: "2026年度 シラバス検索\n科目名・教員名で検索できます" },
+    mail:    { name: "メール",   bg: "linear-gradient(180deg,#5aa9ff,#2f6fe0)", glyph: "✉" },
+    talk:    { name: "トーク",   bg: "linear-gradient(180deg,#5fd08a,#22a356)", glyph: "…" },
+    photo:   { name: "写真",     bg: "conic-gradient(#ff6b6b,#ffd93b,#6bcB77,#4d96ff,#c77dff,#ff6b6b)", glyph: "", blurb: "写真 1,284枚 ・ 動画 37本" },
+    camera:  { name: "カメラ",   bg: "linear-gradient(180deg,#d7d9dd,#9ea3ab)", glyph: "◉", fg: "#2a2d33", blurb: "カメラを起動しています…" },
+    weather: { name: "天気",     bg: "linear-gradient(180deg,#5cb8ff,#2b7fd6)", glyph: "☀", fg: "#ffd23f" },
+    clock:   { name: "時計",     bg: "#111", glyph: "◷", blurb: "アラーム 7:30（毎日）\nアラーム 7:45（月〜金）" },
+    cal:     { name: "カレンダー", bg: "#fff", glyph: `<small>${DOW}曜日</small><span class="cal">${now.getDate()}</span>` },
+    map:     { name: "地図",     bg: "linear-gradient(135deg,#b6e3a6 0 50%,#f6e6a6 50%)", glyph: "➤", fg: "#d6453d", blurb: "現在地：講義棟付近" },
+    browser: { name: "ブラウザ", bg: "linear-gradient(180deg,#fff,#dfe6ee)", glyph: "◎", fg: "#2f6fe0", blurb: "検索履歴：レポート 書き方 例 / 学食 メニュー" },
+    music:   { name: "音楽",     bg: "linear-gradient(180deg,#ff6b8a,#e0245e)", glyph: "♪", blurb: "最近再生した曲：作業用BGM 2時間" },
+    video:   { name: "動画",     bg: "linear-gradient(180deg,#ff5a4f,#d42a20)", glyph: "▶", blurb: "おすすめ：5分でわかる統計学" },
+    calc:    { name: "電卓",     bg: "#2b2b2b", glyph: "±", fg: "#ff9f0a", blurb: "0" },
+    memo:    { name: "メモ",     bg: "linear-gradient(180deg,#ffe27a,#f5c518)", glyph: "≡", fg: "#5a4300", blurb: "・レポート 金曜〆切\n・ゼミ発表 スライド10枚\n・牛乳" },
+    settings:{ name: "設定",     bg: "linear-gradient(180deg,#9aa0a8,#6b7078)", glyph: "⚙", blurb: "画面の明るさ ・ 通知 ・ おやすみモード" },
+    train:   { name: "乗換案内", bg: "linear-gradient(180deg,#2bb3a3,#15857a)", glyph: "乗", blurb: "次の電車 16:42 発（あと2時間）" },
+    library: { name: "図書館",   bg: "linear-gradient(180deg,#a8774f,#7a5232)", glyph: "本", blurb: "貸出中 3冊 ・ 返却期限 11/14" },
+    shift:   { name: "シフト",   bg: "linear-gradient(180deg,#a07cf0,#6e4ad6)", glyph: "勤", blurb: "今週のシフト：木 17-22 / 土 10-16" },
+    game:    { name: "パズル",   bg: "linear-gradient(135deg,#ff9a3c,#ff4f8b)", glyph: "◆", blurb: "ステージ 482 ・ ライフ 0/5" },
+    money:   { name: "家計簿",   bg: "linear-gradient(180deg,#3fae7e,#1e7f57)", glyph: "¥", blurb: "今月の食費 ¥18,240（予算の76%）" },
+    sns:     { name: "つぶやき", bg: "#111", glyph: "#", blurb: "タイムラインを読み込み中…" },
+    flea:    { name: "フリマ",   bg: "linear-gradient(180deg,#ff7a59,#e8492a)", glyph: "売", blurb: "出品中：教科書「統計学入門」 ¥1,200" },
+    news:    { name: "ニュース", bg: "linear-gradient(180deg,#fff,#f0f0f0)", glyph: "N", fg: "#d6453d", blurb: "トップニュース：今日は全国的に晴れ" },
+    health:  { name: "歩数",     bg: "linear-gradient(180deg,#ff8fb1,#ff4f7b)", glyph: "♥", blurb: "今日の歩数 2,481歩" },
+  };
+
+  const MAILS = [
+    { from: "学務課", time: "8:02", subj: "【重要】後期履修登録の確認について", body: "履修登録の確認期間は11月14日（金）までです。\n登録内容に誤りがないか、学生ポータルで必ず確認してください。" },
+    { from: "中村（ゼミ）", time: "昨日", subj: "来週の発表順", body: "来週のゼミの発表順です。\n1. 佐藤 2. あなた 3. 田中\nスライドは前日までに共有フォルダへ。" },
+    { from: "図書館", time: "昨日", subj: "返却期限のお知らせ", body: "貸出中の資料の返却期限が近づいています。\n返却期限：11月14日" },
+    { from: "バイト先", time: "月曜", subj: "12月シフト提出のお願い", body: "12月のシフト希望を今週中に提出してください。" },
+    { from: "サークル連絡", time: "月曜", subj: "冬合宿のアンケート", body: "冬合宿の参加アンケートにご協力ください。\n締切は今週末です。" },
+    { from: "キャリアセンター", time: "11/7", subj: "インターンシップ説明会のご案内", body: "学内でインターンシップ説明会を開催します。\n申し込みは学生ポータルから。" },
+  ];
+  const TALK = [
+    { who: "田中", text: "今日の課題やった？" },
+    { who: "佐藤", text: "まだ…" },
+    { who: "me", text: "3限のやつ？" },
+    { who: "田中", text: "そうそう、出席コード出たら教えて笑" },
+    { who: "佐藤", text: "自分で見なさい" },
+  ];
+
+  const $ = id => document.getElementById(id);
+  const view = $("view");
+  let g = null, raf = 0, audio = null, day = null;
+
+  const store = {
+    get() { try { return JSON.parse(localStorage.getItem("ichiban-3koma-v2") || "null"); } catch { return null; } },
+    set(v) { try { localStorage.setItem("ichiban-3koma-v2", JSON.stringify(v)); } catch {} },
+  };
+  const showBest = () => {
+    const b = store.get();
+    $("bestTitle").textContent = b ? `自己ベスト：平均 ${b.avg.toFixed(1)}位（1位 ${b.firsts}回）` : "";
+  };
+  showBest();
+
+  function beep(f, d = .05, type = "square", v = .05) {
+    if (!audio) return;
+    try {
+      const o = audio.createOscillator(), gn = audio.createGain();
+      o.type = type; o.frequency.value = f;
+      gn.gain.setValueAtTime(v, audio.currentTime);
+      gn.gain.exponentialRampToValueAtTime(.0001, audio.currentTime + d);
+      o.connect(gn).connect(audio.destination); o.start(); o.stop(audio.currentTime + d);
+    } catch {}
+  }
+  const buzz = ms => { try { navigator.vibrate && navigator.vibrate(ms); } catch {} };
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const pick = a => a[Math.floor(Math.random() * a.length)];
+  const shuffle = a => { const r = a.slice(); for (let i = r.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [r[i], r[j]] = [r[j], r[i]]; } return r; };
+  const gauss = () => { let u = 0, v = 0; while (!u) u = Math.random(); while (!v) v = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+  const setFace = (el, t) => { el.style.setProperty("--skin", t.skin); el.style.setProperty("--hair", t.hair); el.classList.toggle("glasses", !!t.glasses); };
+
+  /* ---------- ホーム画面の配置 ---------- */
+  function makeLayout() {
+    const ids = shuffle(Object.keys(APPS).filter(k => k !== "attend"));
+    const dock = ids.slice(0, 4);
+    const grid = ids.slice(4, 19);
+    grid.splice(Math.floor(Math.random() * 16), 0, "attend");
+    const badges = {};
+    for (const id of ["mail", "talk", "sns", "news", "portal", "shift"]) if (Math.random() < .7) badges[id] = 1 + Math.floor(Math.random() * 14);
+    return { grid, dock, badges, wall: pick(WALLS) };
+  }
+  const iconHTML = id => {
+    const a = APPS[id], b = g.layout.badges[id];
+    return `<button class="icon" data-act="open" data-id="${id}"><i style="background:${a.bg};color:${a.fg || "#fff"}">${a.glyph}${b ? `<em>${b}</em>` : ""}</i><span>${a.name}</span></button>`;
+  };
+
+  /* ---------- スマホの画面 ---------- */
+  function appState() { return !g.revealed ? "wait" : g.closed ? "closed" : "open"; }
+  const STATE_TEXT = { wait: "受付前", open: "出席受付中", closed: "受付終了", loading: "読み込み中…" };
+
+  function render() {
+    const s = g.screen;
+    $("display").classList.toggle("on-home", s === "home");
+    $("wall").style.background = s === "home" ? g.layout.wall : "transparent";
+    if (s === "home") {
+      view.innerHTML = `<div class="home">
+        <div class="clock">${g.plan.time}</div><div class="date">${DATE}</div>
+        <div class="grid">${g.layout.grid.map(iconHTML).join("")}</div>
+        <div class="dock">${g.layout.dock.map(iconHTML).join("")}</div>
+      </div>`;
+    } else if (s === "app") {
+      const st = g.appView;
+      view.innerHTML = `
+        <div class="bar"><b>出席</b><span class="spacer"></span><button class="reload" data-act="reload">↻ 更新</button></div>
+        <div class="pane">
+          <div class="course-card">
+            <small>${g.plan.koma}限 ・ ${g.plan.course.room}</small>
+            <strong>${g.plan.course.name} 第${g.plan.course.n}回</strong>
+            <span class="state ${st}">${STATE_TEXT[st]}</span>
+          </div>
+          <button class="main-btn" data-act="toCode" ${st === "open" ? "" : "disabled"}>出席を提出</button>
+          <p class="hint">${st === "open" ? "教室で表示されたコードを入力してください" : st === "closed" ? "この授業の出席受付は終了しました" : "受付が始まると提出できます"}</p>
+        </div>`;
+    } else if (s === "code") {
+      view.innerHTML = `
+        <div class="bar"><button class="back" data-act="back">‹ 戻る</button><span class="spacer"></span><b>コード入力</b><span class="spacer"></span><span style="width:40px"></span></div>
+        <div class="pane">
+          <div class="slots" id="slots">${[0,1,2,3,4,5].map(i => `<div class="slot${i === g.input.length ? " cur" : ""}">${g.input[i] ?? ""}</div>`).join("")}</div>
+          <p class="err" id="err">${g.err}</p>
+          <div class="keys">
+            ${[1,2,3,4,5,6,7,8,9].map(n => `<button data-k="${n}">${n}</button>`).join("")}
+            <button class="fn" data-k="del">⌫</button><button data-k="0">0</button><button class="send" data-act="send">送信</button>
+          </div>
+        </div>`;
+    } else if (s === "done") {
+      view.innerHTML = `<div class="pane done">
+        <div class="check">✓</div><strong>出席を受け付けました</strong>
+        <span class="num">受付 ${String(g.myRank).padStart(3, "0")}</span>
+      </div>`;
+    } else if (s === "dummy") {
+      view.innerHTML = dummyHTML(g.dummy);
+    }
+  }
+
+  function dummyHTML(id) {
+    const a = APPS[id];
+    if (id === "mail") {
+      if (g.mailIdx != null) {
+        const m = MAILS[g.mailIdx];
+        return `<div class="bar"><button class="back" data-act="mailBack">‹ 受信トレイ</button></div>
+          <div class="pane scroll"><b class="m-subj">${m.subj}</b><small class="muted">${m.from} ・ ${m.time}</small><p class="m-body">${m.body}</p></div>`;
+      }
+      return `<div class="bar"><b>受信トレイ</b><span class="spacer"></span><small class="muted">${g.layout.badges.mail ? g.layout.badges.mail + "件未読" : ""}</small></div>
+        <div class="list">${MAILS.map((m, i) => `<button class="row${i < 2 ? " unread" : ""}" data-act="mail" data-id="${i}">
+          <span class="r-top"><b>${m.from}</b><small>${m.time}</small></span>
+          <span class="r-subj">${m.subj}</span><span class="r-prev muted">${m.body.replace(/\n/g, " ")}</span></button>`).join("")}</div>`;
+    }
+    if (id === "talk") {
+      return `<div class="bar"><b>デザイン演習 3班（4）</b></div>
+        <div class="chat">${TALK.map(t => t.who === "me" ? `<div class="msg me"><span>${t.text}</span></div>` : `<div class="msg"><small>${t.who}</small><span>${t.text}</span></div>`).join("")}</div>`;
+    }
+    if (id === "weather") {
+      const temps = [17, 19, 18, 15, 16];
+      return `<div class="bar"><b>天気</b></div>
+        <div class="pane center"><small class="muted">現在地</small><div class="wx-now">18°</div><span>晴れ ・ 最高 21° 最低 11°</span>
+        <div class="wx-rows" style="width:100%">${["12時","13時","14時","15時","16時"].map((h, i) => `<div>${h}<b>${i === 3 ? "☁" : "☀"}</b>${temps[i]}°</div>`).join("")}</div></div>`;
+    }
+    if (id === "cal") {
+      return `<div class="bar"><b>${DATE}</b></div>
+        <div class="pane scroll">${day.plan.map(p => `<div class="cal-item"><small>${p.time}</small><span>${p.koma}限 ${p.course.name}<br><small>${p.course.room}</small></span></div>`).join("")}
+        <div class="cal-item"><small>17:00</small><span>バイト</span></div></div>`;
+    }
+    if (id === "portal") {
+      return `<div class="bar"><b>学生ポータル</b></div>
+        <div class="pane scroll">
+          <div class="notice"><b>休講</b>　11/13 4限 英語コミュニケーション</div>
+          <div class="notice"><b>お知らせ</b>　後期履修登録の確認期間は 11/14 まで</div>
+          <div class="notice"><b>出席について</b>　授業の出席登録は「出席」アプリから行ってください</div>
+        </div>`;
+    }
+    return `<div class="bar"><b>${a.name}</b></div>
+      <div class="pane center"><i class="big-glyph" style="background:${a.bg};color:${a.fg || "#fff"}">${a.glyph}</i>
+      <b>${a.name}</b><p class="m-body muted">${a.blurb || ""}</p></div>`;
+  }
+
+  function go(screen) {
+    g.screen = screen;
+    if (screen === "app") g.appView = appState();
+    render();
+  }
+
+  function locked() { return !g || g.finished || g.lockedUntil > performance.now(); }
+
+  function act(a, id) {
+    if (locked()) return;
+    if (a === "open") {
+      beep(500, .03);
+      if (id === "attend") go("app");
+      else { g.dummy = id; g.mailIdx = null; go("dummy"); }
+    }
+    else if (a === "mail") { beep(460, .02); g.mailIdx = +id; render(); }
+    else if (a === "mailBack") { g.mailIdx = null; render(); }
+    else if (a === "reload") {
+      beep(420, .03); g.appView = "loading"; render();
+      setTimeout(() => { if (g && g.screen === "app" && !g.finished) { g.appView = appState(); render(); } }, 250);
+    }
+    else if (a === "toCode") { beep(560, .03); g.err = ""; go("code"); }
+    else if (a === "back") { go("app"); }
+    else if (a === "home") { go("home"); }
+    else if (a === "send") submit();
+  }
+
+  function key(k) {
+    if (locked() || g.screen !== "code") return;
+    if (k === "del") g.input = g.input.slice(0, -1);
+    else if (g.input.length < 6) g.input += k;
+    g.err = ""; beep(640, .03); render();
+  }
+
+  function submit() {
+    if (g.input.length < 6) { g.err = "6桁のコードを入力してください"; render(); return; }
+    if (g.input !== g.code) {
+      g.miss++; g.err = "コードが正しくありません"; g.input = "";
+      render(); $("slots").classList.add("ng");
+      beep(140, .15, "sawtooth", .06); buzz(60); return;
+    }
+    g.myTime = (performance.now() - g.revealAt) / 1000;
+    g.myRank = g.npc.filter(t => t < g.myTime).length + 1;
+    g.finished = true;
+    beep(880, .07, "triangle", .07); setTimeout(() => beep(1320, .1, "triangle", .07), 80); buzz(20);
+    go("done");
+    setTimeout(showResult, 1100);
+  }
+
+  function phoneMsg(title, sub, ms) {
+    $("pmTitle").textContent = title; $("pmSub").textContent = sub; $("phoneMsg").hidden = false;
+    if (ms) setTimeout(() => { $("phoneMsg").hidden = true; }, ms);
+  }
+
+  /* ---------- 授業の進行 ---------- */
+  function setSlide(i) {
+    const sl = g.plan.course.slides;
+    const [t, items] = sl[i % sl.length];
+    $("slide").innerHTML = `<div class="slide-title">${t}</div><ul class="slide-body">${items.map(x => `<li>${x}</li>`).join("")}</ul>`;
+    $("slideNo").textContent = `${6 + i} / 24`;
+  }
+  function say(text, ms = 1600) {
+    $("bubble").textContent = text;
+    clearTimeout(g.sayT);
+    if (ms) g.sayT = setTimeout(() => { if (g) $("bubble").textContent = ""; }, ms);
+  }
+  const fmt = c => `${c.slice(0, 3)} ${c.slice(3)}`;
+
+  function reveal() {
+    g.revealed = true; g.revealAt = performance.now();
+    $("teacher").className = "teacher";
+    say("はい、出席取ります", 2500);
+    $("slide").innerHTML = `<div class="reveal"><div class="lbl">出席コード</div><div class="code">${fmt(g.code)}</div>
+      <div class="sub">${g.t.close < 20 ? `${g.t.close}秒で締め切ります` : ""}</div></div>`;
+    beep(330, .12, "triangle", .06);
+  }
+  function hideCode() {
+    g.codeHidden = true;
+    $("slide").innerHTML = `<div class="reveal"><div class="lbl">出席コード</div><div class="code gone">●●● ●●●</div><div class="sub">表示は終了しました</div></div>`;
+    say("はい、消しまーす", 2000);
+  }
+  function closeReception() {
+    g.closed = true;
+    say("出席、締め切ります", 0);
+    if (g.screen === "app" && g.appView === "open") { /* 開いたままの画面は更新しないと変わらない */ }
+    if (!g.finished) {
+      g.finished = true; g.absent = true;
+      phoneMsg("受付終了", "出席の受付が締め切られました…", 0);
+      beep(200, .3, "sawtooth", .06); buzz([100, 60, 100]);
+      setTimeout(showResult, 1500);
+    }
+  }
+
+  function caught() {
+    g.caughtN++; g.lockedUntil = performance.now() + 2500;
+    phoneMsg("スマホしまいなさい", "先生に見つかった…（2.5秒 操作できない）", 2500);
+    buzz([80, 60, 80]); beep(180, .25, "sawtooth", .07);
+    g.screen = "home"; render();
+  }
+
+  function tick(now) {
+    if (!g) return;
+    const t = (now - g.t0) / 1000, T = g.t;
+    if (!g.revealed) {
+      if (t > g.nextSlide) { g.slideIdx++; setSlide(g.slideIdx); g.nextSlide = t + rand(2.2, 3.5); beep(260, .02, "sine", .03); }
+      if (t > g.nextFake) { say(pick(FAKEOUTS)); g.nextFake = t + rand(...T.fake); }
+      const tc = $("teacher");
+      if (!T.look) { /* スマホを注意しない先生 */ }
+      else if (g.look.phase === "idle" && t > g.look.at) { g.look.phase = "warn"; g.look.at = t + 0.7; tc.className = "teacher warn"; }
+      else if (g.look.phase === "warn" && t > g.look.at) { g.look.phase = "look"; g.look.at = t + 1.3; tc.className = "teacher look"; say("…", 1300); }
+      else if (g.look.phase === "look") {
+        if (g.screen !== "home" && g.lockedUntil < now) caught();
+        if (t > g.look.at) { g.look.phase = "idle"; g.look.at = t + rand(...T.look); tc.className = "teacher"; }
+      }
+      if (t > g.revealT) reveal();
+    } else {
+      const since = (now - g.revealAt) / 1000;
+      if (!g.codeHidden && since > T.show) hideCode();
+      if (!g.closed && since > T.close) closeReception();
+      const n = g.npc.filter(x => x < Math.min(since, T.close)).length + (g.finished && !g.absent ? 1 : 0);
+      const c = $("counter");
+      c.textContent = g.closed ? `受付終了 ・ 出席 ${n} / ${CLASS_SIZE}` : `提出済み ${n} / ${CLASS_SIZE}`;
+      c.classList.toggle("closed", g.closed);
+    }
+    raf = requestAnimationFrame(tick);
+  }
+
+  function hideOverlays() { for (const id of ["title", "intro", "result", "final"]) $(id).hidden = true; }
+
+  function newDay() {
+    if (!audio) { try { audio = new (window.AudioContext || window.webkitAudioContext)(); } catch {} }
+    try { audio && audio.resume(); } catch {}
+    const courses = shuffle(COURSE_POOL).slice(0, ROUNDS);
+    const teachers = shuffle(TEACHERS).slice(0, ROUNDS);
+    day = { plan: KOMA.map((k, i) => ({ ...k, course: courses[i], teacher: teachers[i] })), results: [] };
+    showIntro();
+  }
+
+  function showIntro() {
+    const p = day.plan[day.results.length];
+    $("iKoma").textContent = `${p.koma}限 ・ ${p.time}〜`;
+    $("iCourse").textContent = `${p.course.name} 第${p.course.n}回`;
+    setFace($("iFace"), p.teacher);
+    $("iName").textContent = p.teacher.name; $("iTag").textContent = p.teacher.tag; $("iDesc").textContent = p.teacher.desc;
+    hideOverlays(); $("intro").hidden = false;
+  }
+
+  function start() {
+    try { audio && audio.resume(); } catch {}
+    try { navigator.wakeLock && navigator.wakeLock.request("screen").catch(() => {}); } catch {}
+    const plan = day.plan[day.results.length], T = plan.teacher;
+    // 他の学生の提出タイム（6桁なので最速でも2.8秒くらい）。締切後の人は欠席。
+    const npc = Array.from({ length: CLASS_SIZE - 1 }, () => 2.8 + (T.slow || 0) + Math.exp(Math.log(5.5) + 0.75 * gauss()))
+      .filter(x => x < T.close).sort((a, b) => a - b);
+    g = {
+      plan, t: T, npc, code: String(Math.floor(Math.random() * 1000000)).padStart(6, "0"),
+      layout: null, screen: "home", input: "", err: "", revealed: false, codeHidden: false, closed: false, appView: "wait",
+      revealT: rand(...T.reveal), nextSlide: rand(2, 3), nextFake: rand(...T.fake), slideIdx: 0,
+      look: { phase: "idle", at: rand(1.5, 3.5) },
+      lockedUntil: 0, miss: 0, caughtN: 0, finished: false, absent: false, t0: performance.now(),
+    };
+    g.layout = makeLayout();
+    $("courseName").textContent = plan.course.name; $("sbTime").textContent = plan.time;
+    $("counter").textContent = ""; $("counter").classList.remove("closed");
+    $("bubble").textContent = ""; $("teacher").className = "teacher"; setFace($("tFace"), T);
+    $("phoneMsg").hidden = true;
+    setSlide(0); render();
+    hideOverlays();
+    cancelAnimationFrame(raf); raf = requestAnimationFrame(tick);
+  }
+
+  function showResult() {
+    const p = g.plan;
+    $("rCourse").textContent = `${p.koma}限 ${p.course.name}（${p.teacher.name}）`;
+    $("rCaught").textContent = g.caughtN; $("rMiss").textContent = g.miss;
+    const badge = $("rTitle");
+    const rows = [];
+    if (g.absent) {
+      $("rRank").textContent = "欠席"; $("rUnit").textContent = ""; $("rOf").textContent = `出席できたのは ${g.npc.length}人 / ${CLASS_SIZE}人`;
+      badge.textContent = "受付に間に合わず"; badge.classList.add("bad");
+      $("rTime").textContent = "—";
+      g.npc.slice(0, 3).forEach((t, i) => rows.push(`<div>${i + 1}位　${t.toFixed(2)}秒　${NAMES[(i * 7 + p.course.n) % NAMES.length]}さん</div>`));
+      rows.push(`<div class="absent">あなた　欠席</div>`);
+    } else {
+      const r = g.myRank, tm = g.myTime;
+      $("rRank").textContent = r; $("rUnit").textContent = "番目"; $("rOf").textContent = `受講者 ${CLASS_SIZE}人中`;
+      badge.textContent = r === 1 ? "一番乗り" : r <= 3 ? "最前列の常連" : r <= 10 ? "早起き組" : r <= 40 ? "ふつうの学生" : r <= 80 ? "のんびり屋" : "後ろの席の人";
+      badge.classList.remove("bad");
+      $("rTime").textContent = tm.toFixed(2);
+      let ni = 0;
+      for (let pos = 1; pos <= Math.max(4, Math.min(r, 6)); pos++) {
+        if (pos === r) rows.push(`<div class="me">${pos}位　${tm.toFixed(2)}秒　あなた</div>`);
+        else if (ni < g.npc.length) { const t = g.npc[ni++]; rows.push(`<div>${pos}位　${t.toFixed(2)}秒　${NAMES[(pos * 7 + p.course.n) % NAMES.length]}さん</div>`); }
+      }
+      if (r > 6) rows.push(`<div>…</div><div class="me">${r}位　${tm.toFixed(2)}秒　あなた</div>`);
+    }
+    $("feed").innerHTML = rows.join("");
+    day.results.push({ plan: p, rank: g.absent ? null : g.myRank, time: g.absent ? null : g.myTime });
+    $("progress").innerHTML = day.plan.map((c, i) => {
+      const x = day.results[i];
+      const cls = !x ? "pg" : x.rank == null ? "pg absent" : x.rank === 1 ? "pg first" : "pg done";
+      return `<span class="${cls}">${c.koma}限<b>${!x ? "–" : x.rank == null ? "欠席" : x.rank + "位"}</b></span>`;
+    }).join("");
+    const retry = $("retry"); retry.disabled = true;
+    retry.textContent = day.results.length < ROUNDS ? `次の授業へ（${day.results.length + 1}限）` : "今日の結果を見る";
+    hideOverlays(); $("result").hidden = false;
+    setTimeout(() => { retry.disabled = false; }, 700);
+  }
+
+  function showFinal() {
+    const rs = day.results;
+    const ranks = rs.map(x => x.rank ?? CLASS_SIZE);
+    const avg = ranks.reduce((s, x) => s + x, 0) / rs.length;
+    const firsts = rs.filter(x => x.rank === 1).length;
+    const absents = rs.filter(x => x.rank == null).length;
+    const present = rs.filter(x => x.rank != null);
+    const badge = firsts === ROUNDS ? "全コマ一番乗り" : absents === ROUNDS ? "全休" : avg <= 3 ? "最前列の主" : avg <= 10 ? "早起き組" : avg <= 40 ? "ふつうの大学生" : "後ろの席の住人";
+    $("fAvg").textContent = avg.toFixed(1);
+    $("fTitle").textContent = badge;
+    $("fFirsts").textContent = firsts;
+    $("fAbsent").textContent = absents;
+    $("fBestRank").textContent = present.length ? Math.min(...present.map(x => x.rank)) : "—";
+    $("fList").innerHTML = rs.map(x => x.rank == null
+      ? `<div class="absent">${x.plan.koma}限　${x.plan.course.name}　欠席</div>`
+      : `<div class="${x.rank === 1 ? "me" : ""}">${x.plan.koma}限　${x.plan.course.name}　${x.rank}位（${x.time.toFixed(2)}秒）</div>`).join("");
+    const prev = store.get(), fb = $("fBest");
+    if (!prev || avg < prev.avg) { store.set({ avg, firsts }); fb.textContent = prev ? `自己ベスト更新！（前回 平均 ${prev.avg.toFixed(1)}位）` : "初記録！"; fb.classList.add("new"); }
+    else { fb.textContent = `自己ベスト：平均 ${prev.avg.toFixed(1)}位`; fb.classList.remove("new"); }
+    showBest();
+    const again = $("again"); again.disabled = true;
+    hideOverlays(); $("final").hidden = false;
+    beep(523, .12, "triangle", .07); setTimeout(() => beep(659, .12, "triangle", .07), 130); setTimeout(() => beep(784, .2, "triangle", .07), 260);
+    setTimeout(() => { again.disabled = false; }, 700);
+  }
+
+  /* ---------- 入力 ---------- */
+  view.addEventListener("pointerdown", e => {
+    const b = e.target.closest("button"); if (!b || b.disabled) return;
+    e.preventDefault();
+    if (b.dataset.k) key(b.dataset.k); else if (b.dataset.act) act(b.dataset.act, b.dataset.id);
+  });
+  $("homeBtn").addEventListener("pointerdown", e => { e.preventDefault(); act("home"); });
+  document.addEventListener("keydown", e => {
+    if (e.repeat || !g) return;
+    if (/^[0-9]$/.test(e.key)) key(e.key);
+    else if (e.key === "Backspace") key("del");
+    else if (e.key === "Enter" && g.screen === "code") act("send");
+  });
+  $("start").addEventListener("click", newDay);
+  $("go").addEventListener("click", start);
+  $("retry").addEventListener("click", () => { day.results.length < ROUNDS ? showIntro() : showFinal(); });
+  $("again").addEventListener("click", newDay);
+
+  // タイトル画面の後ろに見せる見本のホーム画面
+  day = { plan: KOMA.map((k, i) => ({ ...k, course: COURSE_POOL[i], teacher: TEACHERS[i] })), results: [] };
+  g = { plan: day.plan[1], screen: "home", layout: null, input: "", err: "" };
+  g.layout = makeLayout(); render(); setFace($("tFace"), TEACHERS[0]);
+  g = null; day = null;
+})();
+</script>
+</body>
+</html>
