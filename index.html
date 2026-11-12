@@ -406,11 +406,11 @@ button:focus-visible { outline: 3px solid var(--chalk); outline-offset: 2px; }
   // 先生ごとのクセ。show: コードを出している秒数 / close: 受付の締切秒数 / reveal: コードを出すまでの秒数 / look: 学生を見る間隔
   const TEACHERS = [
     { name: "山口先生", tag: "のんびり", desc: "コードはずっと出しっぱなし。受付も長め。", show: Infinity, close: 40, reveal: [4, 10], look: [3, 6], fake: [3, 6], skin: "#e8c9a6", hair: "#3a2a1c" },
-    { name: "佐々木先生", tag: "すぐ消す", desc: "コードは3秒で消える。見たら覚えて打とう。", show: 3, close: 25, reveal: [4, 10], look: [3, 6], fake: [3, 6], skin: "#f0d2b4", hair: "#9a9a9a", glasses: true, slow: 0.7 },
-    { name: "大川先生", tag: "すぐ締め切る", desc: "受付は10秒で締め切り。間に合わないと欠席。", show: Infinity, close: 10, reveal: [4, 10], look: [3, 6], fake: [3, 6], skin: "#d9b28f", hair: "#151515" },
-    { name: "森先生", tag: "よく見てる", desc: "しょっちゅう学生の方を見る。先にアプリを開いて待つのは危険。", show: Infinity, close: 30, reveal: [5, 11], look: [1, 2.2], fake: [3, 6], skin: "#ecc7a0", hair: "#6b4528", glasses: true },
+    { name: "佐々木先生", tag: "すぐ消す", desc: "コードは2秒で消える。一瞬で覚えて打とう。", show: 2, close: 25, reveal: [4, 10], look: [3, 6], fake: [3, 6], skin: "#f0d2b4", hair: "#9a9a9a", glasses: true, slow: 0.7 },
+    { name: "大川先生", tag: "すぐ締め切る", desc: "受付は8秒で締め切り。間に合わないと欠席。", show: Infinity, close: 8, reveal: [4, 10], look: [3, 6], fake: [3, 6], skin: "#d9b28f", hair: "#151515" },
+    { name: "森先生", tag: "よく見てる", desc: "しょっちゅう学生の方を見る。先にアプリを開いて待つのは危険。", show: Infinity, close: 30, reveal: [5, 11], look: [0.8, 1.8], fake: [3, 6], skin: "#ecc7a0", hair: "#6b4528", glasses: true },
     { name: "西田先生", tag: "スマホ注意しない", desc: "スマホをいじっていても何も言わない。そのかわりクラス全員アプリを開いて待っているので、みんな速い。", show: Infinity, close: 30, reveal: [5, 12], look: null, fake: [3, 6], skin: "#f2d3b3", hair: "#c9a36a", slow: -0.6 },
-    { name: "岡田先生", tag: "焦らす", desc: "なかなかコードを出さない。フェイント多め。コードは6秒で消える。", show: 6, close: 30, reveal: [10, 17], look: [3, 6], fake: [1.4, 2.6], skin: "#e3bf9a", hair: "#4a3020", slow: 0.3 },
+    { name: "岡田先生", tag: "焦らす", desc: "なかなかコードを出さない。フェイント多め。コードは4秒で消える。", show: 4, close: 30, reveal: [10, 17], look: [3, 6], fake: [1.4, 2.6], skin: "#e3bf9a", hair: "#4a3020", slow: 0.3 },
   ];
   const FAKEOUTS = ["えー、では…", "ここ大事です", "来週レポート出します", "…はい、次いきます", "出席…は後で取ります", "じゃあ出席…の前に", "ここテストに出ます"];
   const NAMES = ["佐藤", "鈴木", "高橋", "田中", "伊藤", "渡辺", "山本", "中村", "小林", "加藤", "吉田", "山田", "松本", "井上", "木村", "清水"];
@@ -626,7 +626,7 @@ button:focus-visible { outline: 3px solid var(--chalk); outline-offset: 2px; }
     else if (a === "mailBack") { g.mailIdx = null; render(); }
     else if (a === "reload") {
       beep(420, .03); g.appView = "loading"; render();
-      setTimeout(() => { if (g && g.screen === "app" && !g.finished) { g.appView = appState(); render(); } }, 250);
+      setTimeout(() => { if (g && g.screen === "app" && !g.finished) { g.appView = appState(); render(); } }, 500);
     }
     else if (a === "toCode") { beep(560, .03); g.err = ""; go("code"); }
     else if (a === "back") { go("app"); }
@@ -644,7 +644,10 @@ button:focus-visible { outline: 3px solid var(--chalk); outline-offset: 2px; }
   function submit() {
     if (g.input.length < 6) { g.err = "6桁のコードを入力してください"; render(); return; }
     if (g.input !== g.code) {
-      g.miss++; g.err = "コードが正しくありません"; g.input = "";
+      // 打ち間違いペナルティ：1秒間 入力できない
+      g.miss++; g.err = "コードが正しくありません（1秒後に再入力）"; g.input = "";
+      g.lockedUntil = performance.now() + 1000;
+      setTimeout(() => { if (g && g.screen === "code" && !g.finished) { g.err = ""; render(); } }, 1000);
       render(); $("slots").classList.add("ng");
       beep(140, .15, "sawtooth", .06); buzz(60); return;
     }
@@ -758,8 +761,11 @@ button:focus-visible { outline: 3px solid var(--chalk); outline-offset: 2px; }
     try { audio && audio.resume(); } catch {}
     try { navigator.wakeLock && navigator.wakeLock.request("screen").catch(() => {}); } catch {}
     const plan = day.plan[day.results.length], T = plan.teacher;
-    // 他の学生の提出タイム（6桁なので最速でも2.8秒くらい）。締切後の人は欠席。
-    const npc = Array.from({ length: CLASS_SIZE - 1 }, () => 2.8 + (T.slow || 0) + Math.exp(Math.log(5.5) + 0.75 * gauss()))
+    // 他の学生の提出タイム。締切後の人は欠席。
+    // 大多数: 2.0秒〜 / ガチ勢 3人: 毎回 2.2〜3.0秒で出してくる
+    const npc = Array.from({ length: CLASS_SIZE - 1 }, (_, i) => (T.slow || 0) + (i < 3
+        ? rand(2.2, 3.0)
+        : 2.0 + Math.exp(Math.log(3.6) + 0.6 * gauss())))
       .filter(x => x < T.close).sort((a, b) => a - b);
     g = {
       plan, t: T, npc, code: String(Math.floor(Math.random() * 1000000)).padStart(6, "0"),
