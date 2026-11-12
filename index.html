@@ -292,6 +292,12 @@ button:focus-visible { outline: 3px solid var(--chalk); outline-offset: 2px; }
 .pg.done { border-style: solid; background: var(--app-bg); }
 .pg.first { border: 2px solid var(--chalk); background: var(--app-bg); }
 .pg.absent { border: 2px solid var(--ng); background: var(--app-bg); }
+.share {
+  display: block; padding: 14px; border-radius: 14px; text-decoration: none;
+  background: var(--fg); color: var(--bg); font-weight: 700; font-size: 16px;
+}
+.share:active { opacity: .8; }
+.share:focus-visible { outline: 3px solid var(--chalk); outline-offset: 2px; }
 .best { font-size: 13px; color: var(--muted); }
 .best.new { color: var(--ok); font-weight: 700; }
 
@@ -380,13 +386,15 @@ button:focus-visible { outline: 3px solid var(--chalk); outline-offset: 2px; }
     </div>
     <div class="feed" id="fList"></div>
     <div class="best" id="fBest"></div>
-    <button class="big" id="again">次の日も授業に出る</button>
+    <a class="share" id="share" href="https://x.com/intent/post" target="_blank" rel="noopener">𝕏 に結果を投稿する</a>
+    <button class="big" id="again">タイトルに戻る</button>
   </div>
 </div>
 
 <script>
 (() => {
   const CLASS_SIZE = 120, ROUNDS = 3;
+  const SHARE_URL = "https://lukyuappi.github.io/shusseki-ichiban/";
   const KOMA = [{ koma: 1, time: "9:12" }, { koma: 2, time: "10:58" }, { koma: 3, time: "13:21" }];
 
   const COURSE_POOL = [
@@ -842,6 +850,10 @@ button:focus-visible { outline: 3px solid var(--chalk); outline-offset: 2px; }
     if (!prev || avg < prev.avg) { store.set({ avg, firsts }); fb.textContent = prev ? `自己ベスト更新！（前回 平均 ${prev.avg.toFixed(1)}位）` : "初記録！"; fb.classList.add("new"); }
     else { fb.textContent = `自己ベスト：平均 ${prev.avg.toFixed(1)}位`; fb.classList.remove("new"); }
     showBest();
+    // X に投稿する文章（押すと X の投稿画面が開くだけで、勝手には投稿されない）
+    const lines = rs.map(x => `${x.plan.koma}限 ${x.rank == null ? "欠席" : x.rank + "位"}`).join(" / ");
+    const text = `出席コード一番乗り で今日の授業を受けた！\n平均 ${avg.toFixed(1)}位「${badge}」\n${lines}\n`;
+    $("share").href = `https://x.com/intent/post?text=${encodeURIComponent(text)}&url=${encodeURIComponent(SHARE_URL)}&hashtags=${encodeURIComponent("出席コード一番乗り")}`;
     const again = $("again"); again.disabled = true;
     hideOverlays(); $("final").hidden = false;
     beep(523, .12, "triangle", .07); setTimeout(() => beep(659, .12, "triangle", .07), 130); setTimeout(() => beep(784, .2, "triangle", .07), 260);
@@ -864,7 +876,11 @@ button:focus-visible { outline: 3px solid var(--chalk); outline-offset: 2px; }
   $("start").addEventListener("click", newDay);
   $("go").addEventListener("click", start);
   $("retry").addEventListener("click", () => { day.results.length < ROUNDS ? showIntro() : showFinal(); });
-  $("again").addEventListener("click", newDay);
+  $("again").addEventListener("click", () => {
+    cancelAnimationFrame(raf); g = null; day = null;
+    $("counter").textContent = ""; $("bubble").textContent = ""; $("phoneMsg").hidden = true;
+    hideOverlays(); $("title").hidden = false;
+  });
 
   // タイトル画面の後ろに見せる見本のホーム画面
   day = { plan: KOMA.map((k, i) => ({ ...k, course: COURSE_POOL[i], teacher: TEACHERS[i] })), results: [] };
